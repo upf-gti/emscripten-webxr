@@ -7,6 +7,10 @@ $WebXR: {
     xrGpuBinding: null,
     projectionLayer: null,
 
+    WEBXR_ERR_API_UNSUPPORTED: -2, /**< WebXR Device API not supported in this browser */
+    WEBXR_ERR_GL_INCAPABLE: -3, /**< GL context cannot render WebXR */
+    WEBXR_ERR_SESSION_UNSUPPORTED: -4, /**< given session mode not supported */
+
     _nativize_vec3: function(offset, vec) {
         setValue(offset + 0, vec.x, 'float');
         setValue(offset + 4, vec.y, 'float');
@@ -181,8 +185,16 @@ webxr_init: async function(frameCallback, startSessionCallback, endSessionCallba
         });
 
         // Ensure our context can handle WebXR rendering
-        Module.ctx.makeXRCompatible().then(function() {
+        Module.ctx.makeXRCompatible().then(async function() {
             
+            // Create a WebGPU adapter and device to render with, initialized to be
+            // compatible with the XRDisplay we're presenting to. Note that a canvas
+            // is not necessary if we are only rendering to the XR device.
+            const adapter = await navigator.gpu.requestAdapter({
+                xrCompatible: true
+            });
+            const gpuDevice = await adapter.requestDevice();
+
             // Create the WebXR/WebGPU binding, and with it create a projection
             // layer to render to.
             WebXR.xrGpuBinding = new XRGPUBinding(session, gpuDevice);
@@ -193,6 +205,8 @@ webxr_init: async function(frameCallback, startSessionCallback, endSessionCallba
             //     colorFormat = xrGpuBinding.getPreferredColorFormat();
             //     await initWebGPU();
             // }
+            const colorFormat = navigator.gpu.getPreferredCanvasFormat();
+            const depthStencilFormat = 'depth24plus';
 
             WebXR.projectionLayer = WebXR.xrGpuBinding.createProjectionLayer({
                 colorFormat,
@@ -229,7 +243,7 @@ webxr_init: async function(frameCallback, startSessionCallback, endSessionCallba
             }
             
         }, function() {
-            onError(-3); // WEBXR_ERR_GL_INCAPABLE
+            onError(WebXR.WEBXR_ERR_GL_INCAPABLE);
         });
     };
 
@@ -238,12 +252,10 @@ webxr_init: async function(frameCallback, startSessionCallback, endSessionCallba
     if (!navigator.xr) {
         error = "Sorry, WebXR is not supported by your browser.";
     }
-
-    if (!navigator.gpu) {
+    else if (!navigator.gpu) {
         error = "Sorry, WebGPU is not supported by your browser.";
     }
-
-    if (!('XRGPUBinding' in window)) {
+    else if (!('XRGPUBinding' in window)) {
         error = "Sorry, WebXR/WebGPU interop is not supported by your browser.";
     }
 
@@ -297,16 +309,14 @@ webxr_init: async function(frameCallback, startSessionCallback, endSessionCallba
         } );
         msg.innerText = error;
         document.body.appendChild(msg);
-
         /* Call error callback */
-        onError(-2); // WEBXR_ERR_API_UNSUPPORTED
+        onError(WebXR.WEBXR_ERR_API_UNSUPPORTED);
     }
 },
 
 webxr_is_session_supported__deps: ['$dynCall'],
 webxr_is_session_supported: function(mode, callback) {
-    if(!navigator.xr) {
-        /* WebXR not supported at all */
+    if (!navigator.xr || !navigator.gpu || !('XRGPUBinding' in window) ) {
         dynCall('vii', callback, [mode, 0]);
         return;
     }
