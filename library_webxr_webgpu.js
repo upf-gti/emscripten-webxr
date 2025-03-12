@@ -36,7 +36,7 @@ $WebXR: {
     },
 
     _nativize_rigid_transform: function(offset, t) {
-        offset = WebXR._nativize_matrix(offset, t.matrix);
+        offset = WebXR._nativize_matrix(offset, t.inverse.matrix);
         offset = WebXR._nativize_vec3(offset, t.position);
         offset = WebXR._nativize_vec4(offset, t.orientation);
 
