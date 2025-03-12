@@ -6,10 +6,11 @@ $WebXR: {
     // WebXR/WebGPU interop globals.
     xrGpuBinding: null,
     projectionLayer: null,
+    gpuDevice: null,
 
-    WEBXR_ERR_API_UNSUPPORTED: -2, /**< WebXR Device API not supported in this browser */
-    WEBXR_ERR_GL_INCAPABLE: -3, /**< GL context cannot render WebXR */
-    WEBXR_ERR_SESSION_UNSUPPORTED: -4, /**< given session mode not supported */
+    WEBXR_ERR_WEBXR_UNSUPPORTED: -2, /**< WebXR Device API not supported in this browser */
+    WEBXR_ERR_WEBGPU_UNSUPPORTED: -3, /**< WebXR Device API not supported in this browser */
+    WEBXR_ERR_XRGPU_BINDING_UNSUPPORTED: -4, /**< given session mode not supported */
 
     _nativize_vec3: function(offset, vec) {
         setValue(offset + 0, vec.x, 'float');
@@ -92,8 +93,18 @@ $WebXR: {
     }
 },
 
+webxr_set_device: async function(gpuDevice) {
+    WebXR.gpuDevice = WebGPU.getJsObject(gpuDevice);
+},
+
 webxr_init__deps: ['$dynCall'],
-webxr_init: async function(frameCallback, startSessionCallback, endSessionCallback, errorCallback, userData) {
+webxr_init: async function(frameCallback, initWebXRCallback, startSessionCallback, endSessionCallback, errorCallback, userData) {
+
+    function onInitWebXR() {
+        if(!initWebXRCallback) return;
+        dynCall('vi', initWebXRCallback, [userData]);    
+    };
+
     function onError(errorCode) {
         if(!errorCallback) return;
         dynCall('vii', errorCallback, [userData, errorCode]);
@@ -113,12 +124,15 @@ webxr_init: async function(frameCallback, startSessionCallback, endSessionCallba
 
     const SIZE_OF_WEBXR_VIEW = (16 + 3 + 4 + 16 + 4)*4;
     const views = Module._malloc(SIZE_OF_WEBXR_VIEW*2 + (16 + 4 + 3)*4);
+    let texture_views = [];
 
     function onFrame(time, frame) {
+
         if(!frameCallback) return;
         /* Request next frame */
         const session = frame.session;
         /* RAF is set to null on session end to avoid rendering */
+
         if(Module['webxr_session'] != null) session.requestAnimationFrame(onFrame);
 
         // Getting the pose may fail if, for example, tracking is lost. So we
@@ -129,10 +143,16 @@ webxr_init: async function(frameCallback, startSessionCallback, endSessionCallba
         const pose = frame.getViewerPose(WebXR.refSpace);
         if(!pose) return;
 
-        const glLayer = session.renderState.baseLayer;
         pose.views.forEach(function(view) {
-            const viewport = glLayer.getViewport(view);
-            let offset = views + SIZE_OF_WEBXR_VIEW*(view.eye == 'right' ? 1 : 0);
+            let subImage = WebXR.xrGpuBinding.getViewSubImage(WebXR.projectionLayer, view);
+            let viewport = subImage.viewport;
+
+            let idx = (view.eye == 'right' ? 1 : 0)
+
+            let texture_view = subImage.colorTexture.createView(subImage.getViewDescriptor())
+            texture_views[idx] = WebGPU.importJsTextureView(texture_view)
+
+            let offset = views + SIZE_OF_WEBXR_VIEW*idx;
             offset = WebXR._nativize_rigid_transform(offset, view.transform);
             offset = WebXR._nativize_matrix(offset, view.projectionMatrix);
 
@@ -146,19 +166,6 @@ webxr_init: async function(frameCallback, startSessionCallback, endSessionCallba
         const modelMatrix = views + SIZE_OF_WEBXR_VIEW*2;
         WebXR._nativize_matrix(modelMatrix, pose.transform.matrix);
 
-        /* If framebuffer is non-null, compositor is enabled and we bind it.
-         * If it's null, we need to avoid this call otherwise the canvas FBO is bound */
-        if(glLayer.framebuffer) {
-            /* Make sure that FRAMEBUFFER_BINDING returns a valid value.
-             * For that we create an id in the emscripten object tables
-             * and add the frambuffer */
-            const id = Module.webxr_fbo || GL.getNewId(GL.framebuffers);
-            glLayer.framebuffer.name = id;
-            GL.framebuffers[id] = glLayer.framebuffer;
-            Module.webxr_fbo = id;
-            Module.ctx.bindFramebuffer(Module.ctx.FRAMEBUFFER, glLayer.framebuffer);
-        }
-
         /* Set and reset environment for webxr_get_input_pose calls */
         Module['webxr_frame'] = frame;
         /*
@@ -167,7 +174,8 @@ webxr_init: async function(frameCallback, startSessionCallback, endSessionCallba
                 static_cast<WebXrExample*>(userData)->drawWebXRFrame(views);
             }
         */
-        dynCall('viiiii', frameCallback, [userData, time, modelMatrix, views, pose.views.length]);
+
+        dynCall('viiiiiii', frameCallback, [userData, time, modelMatrix, views, texture_views[0], texture_views[1], pose.views.length]);
         Module['webxr_frame'] = null;
     };
 
@@ -185,78 +193,86 @@ webxr_init: async function(frameCallback, startSessionCallback, endSessionCallba
         });
 
         // Ensure our context can handle WebXR rendering
-        Module.ctx.makeXRCompatible().then(async function() {
+        // Module.ctx.makeXRCompatible().then(async function() {
             
-            // Create a WebGPU adapter and device to render with, initialized to be
-            // compatible with the XRDisplay we're presenting to. Note that a canvas
-            // is not necessary if we are only rendering to the XR device.
-            const adapter = await navigator.gpu.requestAdapter({
-                xrCompatible: true
-            });
-            const gpuDevice = await adapter.requestDevice();
+        // Create a WebGPU adapter and device to render with, initialized to be
+        // compatible with the XRDisplay we're presenting to. Note that a canvas
+        // is not necessary if we are only rendering to the XR device.
+        // const adapter = await navigator.gpu.requestAdapter({
+        //     xrCompatible: true
+        // });
+        // const gpuDevice = await adapter.requestDevice();
 
-            // Create the WebXR/WebGPU binding, and with it create a projection
-            // layer to render to.
-            WebXR.xrGpuBinding = new XRGPUBinding(session, gpuDevice);
+        if (!WebXR.gpuDevice) {
+            console.error("No GPU Device, please call webxr_set_device(device)");
+        }
 
-            // If the preferred color format doesn't match what we've been rendering
-            // with so far, rebuild the pipeline
-            // if (colorFormat != xrGpuBinding.getPreferredColorFormat()) {
-            //     colorFormat = xrGpuBinding.getPreferredColorFormat();
-            //     await initWebGPU();
-            // }
-            const colorFormat = navigator.gpu.getPreferredCanvasFormat();
-            const depthStencilFormat = 'depth24plus';
+        // Create the WebXR/WebGPU binding, and with it create a projection
+        // layer to render to.
+        WebXR.xrGpuBinding = new XRGPUBinding(session, WebXR.gpuDevice);
 
-            WebXR.projectionLayer = WebXR.xrGpuBinding.createProjectionLayer({
-                colorFormat,
-                depthStencilFormat,
-            });
+        // If the preferred color format doesn't match what we've been rendering
+        // with so far, rebuild the pipeline
+        // if (colorFormat != xrGpuBinding.getPreferredColorFormat()) {
+        //     colorFormat = xrGpuBinding.getPreferredColorFormat();
+        //     await initWebGPU();
+        // }
+        const colorFormat = navigator.gpu.getPreferredCanvasFormat();
+        // const depthStencilFormat = 'depth24plus';
 
-            // Set the session's layers to display the projection layer. This allows
-            // any content rendered to the layer to be displayed on the XR device.
-            session.updateRenderState({ layers: [WebXR.projectionLayer] });
-
-            // Get a reference space, which is required for querying poses. In this
-            // case an 'local' reference space means that all poses will be relative
-            // to the location where the XR device was first detected.
-            session.requestReferenceSpace('local').then((refSpace) => {
-                WebXR.refSpaces['local'] = refSpace;
-                WebXR.refSpace = 'local';
-
-                // Give application a chance to react to session starting
-                // e.g. finish current desktop frame.
-                onSessionStart(mode);
-
-                // Inform the session that we're ready to begin drawing.
-                session.requestAnimationFrame(onFrame);
-            });
-
-            /* Request and cache other available spaces, which may not be available */
-            for(const s of ['viewer', 'local-floor', 'bounded-floor', 'unbounded']) {
-                session.requestReferenceSpace(s).then(refSpace => {
-                    /* We prefer the reference space automatically in above order */
-                    WebXR.refSpace = s;
-
-                    WebXR.refSpaces[s] = refSpace;
-                }, function() { /* Leave refSpaces[s] unset. */ })
-            }
-            
-        }, function() {
-            onError(WebXR.WEBXR_ERR_GL_INCAPABLE);
+        WebXR.projectionLayer = WebXR.xrGpuBinding.createProjectionLayer({
+            colorFormat
+            // depthStencilFormat,
         });
+
+        // Set the session's layers to display the projection layer. This allows
+        // any content rendered to the layer to be displayed on the XR device.
+        session.updateRenderState({ layers: [WebXR.projectionLayer] });
+
+        // Get a reference space, which is required for querying poses. In this
+        // case an 'local' reference space means that all poses will be relative
+        // to the location where the XR device was first detected.
+        session.requestReferenceSpace('local').then((refSpace) => {
+            //WebXR.refSpaces['local'] = refSpace;
+            WebXR.refSpace = refSpace;
+
+            // Give application a chance to react to session starting
+            // e.g. finish current desktop frame.
+            onSessionStart(mode);
+
+            // Inform the session that we're ready to begin drawing.
+            session.requestAnimationFrame(onFrame);
+        });
+
+        // /* Request and cache other available spaces, which may not be available */
+        // for(const s of ['viewer', 'local-floor', 'bounded-floor', 'unbounded']) {
+        //     session.requestReferenceSpace(s).then(refSpace => {
+        //         /* We prefer the reference space automatically in above order */
+        //         WebXR.refSpace = s;
+
+        //         WebXR.refSpaces[s] = refSpace;
+        //     }, function() { /* Leave refSpaces[s] unset. */ })
+        // }
+            
+        // }, function() {
+        //     onError(WebXR.WEBXR_ERR_GL_INCAPABLE);
+        // });
     };
 
     let error = "";
+    let error_code = 0;
 
     if (!navigator.xr) {
         error = "Sorry, WebXR is not supported by your browser.";
+        error_code = WebXR.WEBXR_ERR_API_UNSUPPORTED;
     }
     else if (!navigator.gpu) {
         error = "Sorry, WebGPU is not supported by your browser.";
+        error_code = WebXR.WEBXR_ERR_WEBGPU_UNSUPPORTED;
     }
     else if (!('XRGPUBinding' in window)) {
         error = "Sorry, WebXR/WebGPU interop is not supported by your browser.";
+        error_code = WebXR.WEBXR_ERR_XRGPU_BINDING_UNSUPPORTED;
     }
 
     // If the UA allows creation of immersive VR sessions enable the
@@ -266,21 +282,32 @@ webxr_init: async function(frameCallback, startSessionCallback, endSessionCallba
         error = 'Sorry, Immersive VR not supported.';
     }
 
+    let xrButton = document.getElementById('xr-button');
+
+    xrButton.addEventListener('click', function() {
+        Module["webxr_request_session_func"]('immersive-vr', ['webgpu'])
+    });
+
+    xrButton.textContent = 'Enter VR';
+    xrButton.disabled = false;
+
     if(error.length == 0) {
+
         Module['webxr_request_session_func'] = function(mode, requiredFeatures, optionalFeatures) {
+
             if(typeof(mode) !== 'string') {
                 mode = (['inline', 'immersive-vr', 'immersive-ar'])[mode];
             }
 
             let toFeatureList = function(bitMask) {
                 const f = [];
-                const features = ['local', 'local-floor', 'bounded-floor', 'unbounded', 'hit-test'];
+                const features = ['local', 'local-floor', 'bounded-floor', 'unbounded', 'hit-test', 'webgpu'];
                 for(let i = 0; i < features.length; ++i) {
                     if((bitMask & (1 << i)) != 0) {
                         f.push(features[i]);
                     }
                 }
-                return features;
+                return f;
             };
             if(typeof(requiredFeatures) === 'number') {
                 requiredFeatures = toFeatureList(requiredFeatures);
@@ -288,6 +315,7 @@ webxr_init: async function(frameCallback, startSessionCallback, endSessionCallba
             if(typeof(optionalFeatures) === 'number') {
                 optionalFeatures = toFeatureList(optionalFeatures);
             }
+
             navigator.xr.requestSession(mode, {
                 requiredFeatures: requiredFeatures,
                 optionalFeatures: optionalFeatures
@@ -295,6 +323,9 @@ webxr_init: async function(frameCallback, startSessionCallback, endSessionCallba
                 onSessionStarted(s, mode);
             }).catch(console.error);
         };
+
+        onInitWebXR();
+
     } else {
 
         console.error( error );
@@ -310,7 +341,7 @@ webxr_init: async function(frameCallback, startSessionCallback, endSessionCallba
         msg.innerText = error;
         document.body.appendChild(msg);
         /* Call error callback */
-        onError(WebXR.WEBXR_ERR_API_UNSUPPORTED);
+        onError(error_code);
     }
 },
 
@@ -327,9 +358,9 @@ webxr_is_session_supported: function(mode, callback) {
     });
 },
 
-webxr_request_session: function(mode) {
+webxr_request_session: function(mode, requiredFeatures) {
     var s = Module['webxr_request_session_func'];
-    if(s) s(mode, ['webgpu']);
+    if(s) s(mode, requiredFeatures);
 },
 
 webxr_request_exit: function() {

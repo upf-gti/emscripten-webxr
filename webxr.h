@@ -12,9 +12,9 @@ extern "C"
 
 /** Errors enum */
 enum WebXRError {
-    WEBXR_ERR_API_UNSUPPORTED = -2, /**< WebXR Device API not supported in this browser */
-    WEBXR_ERR_GL_INCAPABLE = -3, /**< GL context cannot render WebXR */
-    WEBXR_ERR_SESSION_UNSUPPORTED = -4, /**< given session mode not supported */
+    WEBXR_ERR_WEBXR_UNSUPPORTED = -2,
+    WEBXR_ERR_WEBGPU_UNSUPPORTED = -3,
+    WEBXR_ERR_XRGPU_BINDING_UNSUPPORTED = -4,
 };
 
 /** WebXR handedness */
@@ -45,6 +45,7 @@ enum WebXRSessionFeatures {
     WEBXR_SESSION_FEATURE_BOUNDED_FLOOR = 2, /** "bounded-floor" */
     WEBXR_SESSION_FEATURE_UNBOUNDED = 3, /** "unbounded" */
     WEBXR_SESSION_FEATURE_HIT_TEST = 4, /** "hit-test" */
+    WEBXR_SESSION_FEATURE_WEBGPU = 5, /** "hit-test" */
 };
 
 /** WebXR 'XRSessionMode' enum*/
@@ -93,7 +94,14 @@ Callback for frame rendering
 @param views Array of `viewCount` @ref WebXRView "webxr views"
 @param viewCount Size of `views`
 */
-typedef void (*webxr_frame_callback_func)(void* userData, int time, WebXRRigidTransform* headPose, WebXRView views[2], int viewCount);
+typedef void (*webxr_frame_callback_func)(void* userData, int time, WebXRRigidTransform* headPose, WebXRView views[2], WGPUTextureView texture_view_left, WGPUTextureView texture_view_right, int viewCount);
+
+/**
+Callback for WebXr binding init
+
+@param userData User pointer passed to set_session_start_callback
+*/
+typedef void (*webxr_webxr_init_callback_func)(void* userData);
 
 /**
 Callback for VR session start
@@ -111,6 +119,8 @@ Callback for @ref webxr_is_session_supported
 */
 typedef void (*webxr_session_supported_callback_func)(int mode, int supported);
 
+extern void webxr_set_device(
+    WGPUDevice gpuDevice);
 
 /**
 Init WebXR rendering
@@ -123,6 +133,7 @@ Init WebXR rendering
 */
 extern void webxr_init(
         webxr_frame_callback_func frameCallback,
+        webxr_webxr_init_callback_func webxrInitCallback,
         webxr_session_callback_func sessionStartCallback,
         webxr_session_callback_func sessionEndCallback,
         webxr_error_callback_func errorCallback,
@@ -153,8 +164,7 @@ Request session presentation start
 Needs to be called from a [user activation event](https://html.spec.whatwg.org/multipage/interaction.html#triggered-by-user-activation).
 */
 extern void webxr_request_session(WebXRSessionMode mode,
-    WebXRSessionFeatures requiredFeatures,
-    WebXRSessionFeatures optionalFeatures);
+    WebXRSessionFeatures requiredFeatures);
 
 /*
 Request that the webxr presentation exits VR mode
