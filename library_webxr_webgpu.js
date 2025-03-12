@@ -288,10 +288,10 @@ webxr_init: async function(frameCallback, initWebXRCallback, startSessionCallbac
         Module["webxr_request_session_func"]('immersive-vr', ['webgpu'])
     });
 
-    xrButton.textContent = 'Enter VR';
-    xrButton.disabled = false;
-
     if(error.length == 0) {
+
+        xrButton.textContent = 'Enter VR';
+        xrButton.disabled = false;
 
         Module['webxr_request_session_func'] = function(mode, requiredFeatures, optionalFeatures) {
 
