@@ -224,7 +224,7 @@ webxr_init: async function(frameCallback, initWebXRCallback, startSessionCallbac
         // case an 'local' reference space means that all poses will be relative
         // to the location where the XR device was first detected.
         session.requestReferenceSpace('local').then((refSpace) => {
-            //WebXR.refSpaces['local'] = refSpace;
+            // WebXR.refSpaces['local'] = refSpace;
             WebXR.refSpace = refSpace;
 
             // Give application a chance to react to session starting
@@ -377,10 +377,12 @@ webxr_get_input_sources: function(outArrayPtr, max, outCountPtr) {
     if(!s) return; // TODO(squareys) warning or return error
 
     let i = 0;
-    for (let inputSource of s.inputSources) {
+    // this sorts the array so end up breaking the LEFT=0, RIGHT=1 distinction
+    // for (let inputSource of s.inputSources) {
+    for (; i < s.inputSources.length; ++i) {
         if(i >= max) break;
+        let inputSource = s.inputSources[i];
         outArrayPtr = WebXR._nativize_input_source(outArrayPtr, inputSource, i);
-        ++i;
     }
     setValue(outCountPtr, i, 'i32');
 },
@@ -397,7 +399,7 @@ webxr_get_input_pose: function(source, outPosePtr, space) {
 
     const s = space == 0 ? input.gripSpace : input.targetRaySpace;
     if(!s) return false;
-    const pose = f.getPose(s, WebXR.refSpaces[WebXR.refSpace]);
+    const pose = f.getPose(s, WebXR.refSpace);
 
     if(!pose || Number.isNaN(pose.transform.matrix[0])) return false;
 
@@ -405,6 +407,46 @@ webxr_get_input_pose: function(source, outPosePtr, space) {
 
     return true;
 },
+
+webxr_get_input_button: function(source, buttonId, outButtonPtr) {
+    let f = Module['webxr_frame'];
+    if(!f) {
+        console.warn("Cannot call webxr_get_input_buttons outside of frame callback");
+        return false;
+    }
+
+    const id = getValue(source, 'i32');
+    const input = Module['webxr_session'].inputSources[id];
+
+    const button = input.gamepad.buttons[buttonId];
+
+    //  nativize gamepad button
+    setValue(outButtonPtr, button.pressed, 'i8');
+    outButtonPtr +=1;
+    setValue(outButtonPtr, button.touched, 'i8');
+    outButtonPtr +=1;
+    setValue(outButtonPtr, button.value, 'float');
+    outButtonPtr +=4;
+
+    return true;
+},
+
+// webxr_get_input_buttons: function(source, outButtonsPtr) {
+//     let f = Module['webxr_frame'];
+//     if(!f) {
+//         console.warn("Cannot call webxr_get_input_buttons outside of frame callback");
+//         return false;
+//     }
+
+//     const id = getValue(source, 'i32');
+//     const input = Module['webxr_session'].inputSources[id];
+
+//     for(let i = 0; i < input.gamepad.buttons.length; ++i) {
+//         outButtonsPtr[i].value = input.gamepad.buttons[i].value;
+//     }
+
+//     return true;
+// },
 
 };
 

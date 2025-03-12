@@ -32,14 +32,14 @@ enum WebXRTargetRayMode {
     WEBXR_TARGET_RAY_MODE_SCREEN = 2,
 };
 
-/** WebXR 'XRSessionMode' enum*/
+/** WebXR 'WebXRSessionMode' enum*/
 enum WebXRSessionMode {
     WEBXR_SESSION_MODE_INLINE = 0, /** "inline" */
     WEBXR_SESSION_MODE_IMMERSIVE_VR = 1, /** "immersive-vr" */
     WEBXR_SESSION_MODE_IMMERSIVE_AR = 2, /** "immersive-ar" */
 };
 
-/** WebXR 'XRSessionMode' enum*/
+/** WebXR 'WebXRSessionFeatures' enum*/
 enum WebXRSessionFeatures {
     WEBXR_SESSION_FEATURE_LOCAL = 0, /** "local" */
     WEBXR_SESSION_FEATURE_LOCAL_FLOOR = 1, /** "local-floor" */
@@ -49,7 +49,7 @@ enum WebXRSessionFeatures {
     WEBXR_SESSION_FEATURE_WEBGPU = 5, /** "hit-test" */
 };
 
-/** WebXR 'XRSessionMode' enum*/
+/** WebXR 'WebXRInputPoseMode' enum*/
 enum WebXRInputPoseMode {
     WEBXR_INPUT_POSE_GRIP = 0, /** gripSpace */
     WEBXR_INPUT_POSE_TARGET_RAY = 1, /** targetRaySpace */
@@ -77,6 +77,12 @@ typedef struct WebXRInputSource {
     WebXRHandedness handedness;
     WebXRTargetRayMode targetRayMode;
 } WebXRInputSource;
+
+typedef struct GamepadButton {
+    bool pressed;
+    bool touched;
+    float value;
+} GamepadButton;
 
 /**
 Callback for errors
@@ -222,6 +228,17 @@ Get input pose. Can only be called during the frame callback.
 @returns `false` if updating the pose failed, `true` otherwise.
 */
 extern int webxr_get_input_pose(WebXRInputSource* source, WebXRRigidTransform* outPose, WebXRInputPoseMode mode=WEBXR_INPUT_POSE_GRIP);
+
+/**
+Get input buttons. Can only be called during the frame callback.
+
+@param source The source to get the pose for.
+@param outButtons Where to store the buttons.
+@returns `false` if updating the pose failed, `true` otherwise.
+*/
+// extern int webxr_get_input_buttons(WebXRInputSource* source, GamepadButton* outButtons);
+
+extern int webxr_get_input_button(WebXRInputSource* source, int buttonId, GamepadButton* outButton);
 
 }
 
