@@ -8,9 +8,10 @@ $WebXR: {
     projectionLayer: null,
     gpuDevice: null,
 
-    WEBXR_ERR_WEBXR_UNSUPPORTED: -2, /**< WebXR Device API not supported in this browser */
-    WEBXR_ERR_WEBGPU_UNSUPPORTED: -3, /**< WebXR Device API not supported in this browser */
-    WEBXR_ERR_XRGPU_BINDING_UNSUPPORTED: -4, /**< given session mode not supported */
+    WEBXR_ERR_WEBXR_UNSUPPORTED: -2,
+    WEBXR_ERR_WEBGPU_UNSUPPORTED: -3,
+    WEBXR_ERR_XRGPU_BINDING_UNSUPPORTED: -4,
+    WEBXR_ERR_IMMERSIVE_XR_UNSUPPORTED: -5,
 
     _nativize_vec3: function(offset, vec) {
         setValue(offset + 0, vec.x, 'float');
@@ -90,6 +91,23 @@ $WebXR: {
         s.addEventListener(event, function() {
             dynCall('vi', callback, [userData]);
         });
+    },
+
+    _print_error: function(error, error_code, on_error) {
+        console.error( error );
+        /* Call error callback */
+        on_error(error_code);
+        // const msg = document.createElement("div");
+        // Object.assign( msg.style, {
+        //     width: "50%",
+        //     fontSize: "36px",
+        //     fontWeight: "500",
+        //     textAlign: "center",
+        //     margin: "0 auto",
+        //     marginTop: "25%"
+        // } );
+        // msg.innerText = error;
+        // document.body.appendChild(msg);
     }
 },
 
@@ -168,13 +186,6 @@ webxr_init: async function(frameCallback, initWebXRCallback, startSessionCallbac
 
         /* Set and reset environment for webxr_get_input_pose calls */
         Module['webxr_frame'] = frame;
-        /*
-        In C++, the method is like this one:
-            [](void* userData, int, float[16], WebXRView* views) {
-                static_cast<WebXrExample*>(userData)->drawWebXRFrame(views);
-            }
-        */
-
         dynCall('viiiiiii', frameCallback, [userData, time, modelMatrix, views, texture_views[0], texture_views[1], pose.views.length]);
         Module['webxr_frame'] = null;
     };
@@ -192,37 +203,17 @@ webxr_init: async function(frameCallback, initWebXRCallback, startSessionCallbac
             onSessionEnd(mode);
         });
 
-        // Ensure our context can handle WebXR rendering
-        // Module.ctx.makeXRCompatible().then(async function() {
-            
-        // Create a WebGPU adapter and device to render with, initialized to be
-        // compatible with the XRDisplay we're presenting to. Note that a canvas
-        // is not necessary if we are only rendering to the XR device.
-        // const adapter = await navigator.gpu.requestAdapter({
-        //     xrCompatible: true
-        // });
-        // const gpuDevice = await adapter.requestDevice();
-
         if (!WebXR.gpuDevice) {
-            console.error("No GPU Device, please call webxr_set_device(device)");
+            console.error("No GPU Device, please call webxr_set_device(device).");
         }
 
-        // Create the WebXR/WebGPU binding, and with it create a projection
-        // layer to render to.
+        // Create the WebXR/WebGPU binding, and with it create a projection layer to render to.
         WebXR.xrGpuBinding = new XRGPUBinding(session, WebXR.gpuDevice);
 
-        // If the preferred color format doesn't match what we've been rendering
-        // with so far, rebuild the pipeline
-        // if (colorFormat != xrGpuBinding.getPreferredColorFormat()) {
-        //     colorFormat = xrGpuBinding.getPreferredColorFormat();
-        //     await initWebGPU();
-        // }
         const colorFormat = navigator.gpu.getPreferredCanvasFormat();
-        // const depthStencilFormat = 'depth24plus';
 
         WebXR.projectionLayer = WebXR.xrGpuBinding.createProjectionLayer({
             colorFormat
-            // depthStencilFormat,
         });
 
         // Set the session's layers to display the projection layer. This allows
@@ -253,96 +244,83 @@ webxr_init: async function(frameCallback, initWebXRCallback, startSessionCallbac
         //         WebXR.refSpaces[s] = refSpace;
         //     }, function() { /* Leave refSpaces[s] unset. */ })
         // }
-            
-        // }, function() {
-        //     onError(WebXR.WEBXR_ERR_GL_INCAPABLE);
-        // });
     };
 
-    let error = "";
-    let error_code = 0;
+    let xrButton = document.getElementById('xr-button');
 
     if (!navigator.xr) {
-        error = "Sorry, WebXR is not supported by your browser.";
-        error_code = WebXR.WEBXR_ERR_API_UNSUPPORTED;
+        const error_msg = "WebXR is not supported by your browser.";
+        xrButton.textContent = error_msg;
+        WebXR._print_error(error_msg, WebXR.WEBXR_ERR_API_UNSUPPORTED, onError);
+        return;
     }
-    else if (!navigator.gpu) {
-        error = "Sorry, WebGPU is not supported by your browser.";
-        error_code = WebXR.WEBXR_ERR_WEBGPU_UNSUPPORTED;
+
+    // If there's not WebGPU it won't load the engine, so this is unnecessary..
+    if (!navigator.gpu) {
+        const error_msg = "WebGPU is not supported by your browser.";
+        xrButton.textContent = error_msg;
+        WebXR._print_error(error_msg, WebXR.WEBXR_ERR_WEBGPU_UNSUPPORTED, onError);
+        return;
     }
-    else if (!('XRGPUBinding' in window)) {
-        error = "Sorry, WebXR/WebGPU interop is not supported by your browser.";
-        error_code = WebXR.WEBXR_ERR_XRGPU_BINDING_UNSUPPORTED;
+
+    if (!('XRGPUBinding' in window)) {
+        const error_msg = "WebXR/WebGPU interop is not supported by your browser.";
+        xrButton.textContent = error_msg;
+        WebXR._print_error(error_msg, WebXR.WEBXR_ERR_XRGPU_BINDING_UNSUPPORTED, onError);
+        return;
     }
 
     // If the UA allows creation of immersive VR sessions enable the
     // target of the 'Enter XR' button.
     const supported = await navigator.xr.isSessionSupported('immersive-vr');
     if (!supported) {
-        error = 'Sorry, Immersive VR not supported.';
+        const error_msg = "Immersive VR not supported.";
+        xrButton.textContent = error_msg;
+        WebXR._print_error(error_msg, WebXR.WEBXR_ERR_IMMERSIVE_XR_UNSUPPORTED, onError);
+        return;
     }
 
-    let xrButton = document.getElementById('xr-button');
+    // Reaching this means it's all supported!
 
     xrButton.addEventListener('click', function() {
         Module["webxr_request_session_func"]('immersive-vr', ['webgpu'])
     });
 
-    if(error.length == 0) {
+    xrButton.textContent = 'Enter VR';
+    xrButton.disabled = false;
 
-        xrButton.textContent = 'Enter VR';
-        xrButton.disabled = false;
+    Module['webxr_request_session_func'] = function(mode, requiredFeatures, optionalFeatures) {
 
-        Module['webxr_request_session_func'] = function(mode, requiredFeatures, optionalFeatures) {
+        if(typeof(mode) !== 'string') {
+            mode = (['inline', 'immersive-vr', 'immersive-ar'])[mode];
+        }
 
-            if(typeof(mode) !== 'string') {
-                mode = (['inline', 'immersive-vr', 'immersive-ar'])[mode];
-            }
-
-            let toFeatureList = function(bitMask) {
-                const f = [];
-                const features = ['local', 'local-floor', 'bounded-floor', 'unbounded', 'hit-test', 'webgpu'];
-                for(let i = 0; i < features.length; ++i) {
-                    if((bitMask & (1 << i)) != 0) {
-                        f.push(features[i]);
-                    }
+        let toFeatureList = function(bitMask) {
+            const f = [];
+            const features = ['local', 'local-floor', 'bounded-floor', 'unbounded', 'hit-test', 'webgpu'];
+            for(let i = 0; i < features.length; ++i) {
+                if((bitMask & (1 << i)) != 0) {
+                    f.push(features[i]);
                 }
-                return f;
-            };
-            if(typeof(requiredFeatures) === 'number') {
-                requiredFeatures = toFeatureList(requiredFeatures);
             }
-            if(typeof(optionalFeatures) === 'number') {
-                optionalFeatures = toFeatureList(optionalFeatures);
-            }
-
-            navigator.xr.requestSession(mode, {
-                requiredFeatures: requiredFeatures,
-                optionalFeatures: optionalFeatures
-            }).then(function(s) {
-                onSessionStarted(s, mode);
-            }).catch(console.error);
+            return f;
         };
+        if(typeof(requiredFeatures) === 'number') {
+            requiredFeatures = toFeatureList(requiredFeatures);
+        }
+        if(typeof(optionalFeatures) === 'number') {
+            optionalFeatures = toFeatureList(optionalFeatures);
+        }
 
-        onInitWebXR();
+        navigator.xr.requestSession(mode, {
+            requiredFeatures: requiredFeatures,
+            optionalFeatures: optionalFeatures
+        }).then(function(s) {
+            onSessionStarted(s, mode);
+        }).catch(console.error);
+    };
 
-    } else {
-
-        console.error( error );
-        const msg = document.createElement("div");
-        Object.assign( msg.style, {
-            width: "50%",
-            fontSize: "36px",
-            fontWeight: "500",
-            textAlign: "center",
-            margin: "0 auto",
-            marginTop: "25%"
-        } );
-        msg.innerText = error;
-        document.body.appendChild(msg);
-        /* Call error callback */
-        onError(error_code);
-    }
+    onInitWebXR();
 },
 
 webxr_is_session_supported__deps: ['$dynCall'],
