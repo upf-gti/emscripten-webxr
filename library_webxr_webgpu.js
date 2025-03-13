@@ -394,8 +394,8 @@ webxr_get_input_pose: function(source, outPosePtr, space) {
         return false;
     }
 
-    const id = getValue(source, 'i32');
-    const input = Module['webxr_session'].inputSources[id];
+    const hand = getValue(source + 4, 'i32');
+    const input = Module['webxr_session'].inputSources[hand];
 
     const s = space == 0 ? input.gripSpace : input.targetRaySpace;
     if(!s) return false;
@@ -415,38 +415,40 @@ webxr_get_input_button: function(source, buttonId, outButtonPtr) {
         return false;
     }
 
-    const id = getValue(source, 'i32');
-    const input = Module['webxr_session'].inputSources[id];
-
+    const hand = getValue(source + 4, 'i32');
+    const input = Module['webxr_session'].inputSources[hand];
     const button = input.gamepad.buttons[buttonId];
 
     //  nativize gamepad button
-    setValue(outButtonPtr, button.pressed, 'i8');
-    outButtonPtr +=1;
-    setValue(outButtonPtr, button.touched, 'i8');
-    outButtonPtr +=1;
-    setValue(outButtonPtr, button.value, 'float');
+    setValue(outButtonPtr, button.pressed ? 1 : 0, 'i32');
+    outButtonPtr +=4;
+    setValue(outButtonPtr, button.touched ? 1 : 0, 'i32');
+    outButtonPtr +=4;
+    setValue(outButtonPtr, button.value ?? 0.0, 'float');
     outButtonPtr +=4;
 
     return true;
 },
 
-// webxr_get_input_buttons: function(source, outButtonsPtr) {
-//     let f = Module['webxr_frame'];
-//     if(!f) {
-//         console.warn("Cannot call webxr_get_input_buttons outside of frame callback");
-//         return false;
-//     }
+webxr_get_input_axes: function(source, outAxesPtr) {
+    let f = Module['webxr_frame'];
+    if(!f) {
+        console.warn("Cannot call webxr_get_input_buttons outside of frame callback");
+        return false;
+    }
 
-//     const id = getValue(source, 'i32');
-//     const input = Module['webxr_session'].inputSources[id];
+    const hand = getValue(source + 4, 'i32');
+    const input = Module['webxr_session'].inputSources[hand];
+    const axes = input.gamepad.axes;
 
-//     for(let i = 0; i < input.gamepad.buttons.length; ++i) {
-//         outButtonsPtr[i].value = input.gamepad.buttons[i].value;
-//     }
+    //  nativize gamepad axis
+    for(let i = 0; i < 4; ++i) {
+        setValue(outAxesPtr, axes[i], 'float');
+        outAxesPtr +=4;
+    }
 
-//     return true;
-// },
+    return true;
+},
 
 };
 

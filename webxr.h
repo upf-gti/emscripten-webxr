@@ -79,8 +79,8 @@ typedef struct WebXRInputSource {
 } WebXRInputSource;
 
 typedef struct GamepadButton {
-    bool pressed;
-    bool touched;
+    int pressed;
+    int touched;
     float value;
 } GamepadButton;
 
@@ -230,15 +230,22 @@ Get input pose. Can only be called during the frame callback.
 extern int webxr_get_input_pose(WebXRInputSource* source, WebXRRigidTransform* outPose, WebXRInputPoseMode mode=WEBXR_INPUT_POSE_GRIP);
 
 /**
-Get input buttons. Can only be called during the frame callback.
+Get input button. Can only be called during the frame callback.
 
 @param source The source to get the pose for.
-@param outButtons Where to store the buttons.
+@param outButton Where to store the button.
 @returns `false` if updating the pose failed, `true` otherwise.
 */
-// extern int webxr_get_input_buttons(WebXRInputSource* source, GamepadButton* outButtons);
-
 extern int webxr_get_input_button(WebXRInputSource* source, int buttonId, GamepadButton* outButton);
+
+/**
+Get input axes. Can only be called during the frame callback.
+
+@param source The source to get the pose for.
+@param outButton Where to store the axes.
+@returns `false` if updating the pose failed, `true` otherwise.
+*/
+extern int webxr_get_input_axes(WebXRInputSource* source, float* outAxes);
 
 }
 
