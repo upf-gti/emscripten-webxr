@@ -411,7 +411,7 @@ webxr_get_input_pose: function(source, outPosePtr, space) {
 webxr_get_input_button: function(source, buttonId, outButtonPtr) {
     let f = Module['webxr_frame'];
     if(!f) {
-        console.warn("Cannot call webxr_get_input_buttons outside of frame callback");
+        console.warn("Cannot call webxr_get_input_button outside of frame callback");
         return false;
     }
 
@@ -433,16 +433,17 @@ webxr_get_input_button: function(source, buttonId, outButtonPtr) {
 webxr_get_input_axes: function(source, outAxesPtr) {
     let f = Module['webxr_frame'];
     if(!f) {
-        console.warn("Cannot call webxr_get_input_buttons outside of frame callback");
+        console.warn("Cannot call webxr_get_input_axes outside of frame callback");
         return false;
     }
 
     const hand = getValue(source + 4, 'i32');
     const input = Module['webxr_session'].inputSources[hand];
     const axes = input.gamepad.axes;
+    const offset = (hand == 1 ? 2 : 0);
 
     //  nativize gamepad axis
-    for(let i = 0; i < 4; ++i) {
+    for(let i = offset; i < offset + 2; ++i) {
         setValue(outAxesPtr, axes[i], 'float');
         outAxesPtr +=4;
     }
