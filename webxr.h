@@ -79,9 +79,9 @@ typedef struct WebXRInputSource {
 } WebXRInputSource;
 
 typedef struct GamepadButton {
-    int pressed;
-    int touched;
-    float value;
+    int pressed = 0;
+    int touched = 0;
+    float value = false;
 } GamepadButton;
 
 /**
