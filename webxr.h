@@ -78,10 +78,18 @@ typedef struct WebXRInputSource {
     WebXRTargetRayMode targetRayMode;
 } WebXRInputSource;
 
+/** 'WebXRSessionMode' enum*/
+enum GamepadButtonActionState {
+    GAMEPAD_BUTTON_PRESSED_STATE = 0,
+    GAMEPAD_BUTTON_TOUCHED_STATE = 1,
+    GAMEPAD_BUTTON_VALUE_STATE = 2,
+};
+
 typedef struct GamepadButton {
     int pressed = 0;
     int touched = 0;
     float value = false;
+    bool changedSinceLastSync[3]; // 3 states
 } GamepadButton;
 
 /**
