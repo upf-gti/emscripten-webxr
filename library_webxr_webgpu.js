@@ -396,6 +396,10 @@ webxr_get_input_pose: function(source, outPosePtr, space) {
 
     const hand = getValue(source + 4, 'i32');
     const input = Module['webxr_session'].inputSources[hand];
+    if(!input) {
+        console.warn("No valid input with hand " + hand);
+        return false;
+    }
 
     const s = space == 0 ? input.gripSpace : input.targetRaySpace;
     if(!s) return false;
@@ -417,6 +421,10 @@ webxr_get_input_button: function(source, buttonId, outButtonPtr) {
 
     const hand = getValue(source + 4, 'i32');
     const input = Module['webxr_session'].inputSources[hand];
+    if(!input) {
+        console.warn("No valid input with hand " + hand);
+        return false;
+    }
     const button = input.gamepad.buttons[buttonId];
 
     //  nativize gamepad button
@@ -439,6 +447,10 @@ webxr_get_input_axes: function(source, outAxesPtr) {
 
     const hand = getValue(source + 4, 'i32');
     const input = Module['webxr_session'].inputSources[hand];
+    if(!input) {
+        console.warn("No valid input with hand " + hand);
+        return false;
+    }
     const axes = input.gamepad.axes;
     const offset = (hand == 1 ? 2 : 0);
 
