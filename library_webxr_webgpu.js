@@ -218,7 +218,7 @@ webxr_init: async function(frameCallback, initWebXRCallback, startSessionCallbac
 
         // Set the session's layers to display the projection layer. This allows
         // any content rendered to the layer to be displayed on the XR device.
-        session.updateRenderState({ layers: [WebXR.projectionLayer] });
+        session.updateRenderState({ layers: [WebXR.projectionLayer], depthNear: 1000.0, depthFar: 0.01 });
 
         // Get a reference space, which is required for querying poses. In this
         // case an 'local' reference space means that all poses will be relative
