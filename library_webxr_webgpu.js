@@ -377,12 +377,10 @@ webxr_get_input_sources: function(outArrayPtr, max, outCountPtr) {
     if(!s) return; // TODO(squareys) warning or return error
 
     let i = 0;
-    // this sorts the array so end up breaking the LEFT=0, RIGHT=1 distinction
-    // for (let inputSource of s.inputSources) {
-    for (; i < s.inputSources.length; ++i) {
+    for (let inputSource of s.inputSources) {
         if(i >= max) break;
-        let inputSource = s.inputSources[i];
         outArrayPtr = WebXR._nativize_input_source(outArrayPtr, inputSource, i);
+        ++i;
     }
     setValue(outCountPtr, i, 'i32');
 },
@@ -394,10 +392,10 @@ webxr_get_input_pose: function(source, outPosePtr, space) {
         return false;
     }
 
-    const hand = getValue(source + 4, 'i32');
-    const input = Module['webxr_session'].inputSources[hand];
+    const id = getValue(source, 'i32');
+    const input = Module['webxr_session'].inputSources[id];
     if(!input) {
-        console.warn("No valid input with hand " + hand);
+        console.warn("No valid input with id: " + id);
         return false;
     }
 
@@ -419,10 +417,10 @@ webxr_get_input_button: function(source, buttonId, outButtonPtr) {
         return false;
     }
 
-    const hand = getValue(source + 4, 'i32');
-    const input = Module['webxr_session'].inputSources[hand];
+    const id = getValue(source, 'i32');
+    const input = Module['webxr_session'].inputSources[id];
     if(!input) {
-        console.warn("No valid input with hand " + hand);
+        console.warn("No valid input with id: " + id);
         return false;
     }
     const button = input.gamepad.buttons[buttonId];
@@ -445,10 +443,11 @@ webxr_get_input_axes: function(source, outAxesPtr) {
         return false;
     }
 
+    const id = getValue(source, 'i32');
     const hand = getValue(source + 4, 'i32');
-    const input = Module['webxr_session'].inputSources[hand];
+    const input = Module['webxr_session'].inputSources[id];
     if(!input) {
-        console.warn("No valid input with hand " + hand);
+        console.warn("No valid input with id: " + id);
         return false;
     }
     const axes = input.gamepad.axes;
