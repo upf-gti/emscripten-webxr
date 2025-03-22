@@ -89,7 +89,7 @@ typedef struct GamepadButton {
     int pressed = 0;
     int touched = 0;
     float value = false;
-    bool changedSinceLastSync[3]; // 3 states
+    bool changedSinceLastSync[3] = {}; // 3 states
 } GamepadButton;
 
 /**
